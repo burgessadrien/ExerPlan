@@ -1,0 +1,9 @@
+#Project Architecture
+
+This is an Android project with:
+
+ignore the .gradle package.
+
+app files under /app/src
+
+the main app files are in the main directory
