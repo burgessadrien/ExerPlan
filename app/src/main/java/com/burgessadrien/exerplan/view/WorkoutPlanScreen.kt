@@ -16,14 +16,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -75,6 +77,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -247,7 +250,7 @@ fun ExerPlanApp(navController: NavHostController = rememberNavController()) {
                         personalBests = personalBests,
                         onBack = { navController.popBackStack() },
                         onStartTimer = { durations, names -> 
-                            timerViewModel.startMultiTimer(durations, names, userSettings.setupTimerSeconds)
+                            timerViewModel.startMultiTimer(durations, names, 0)
                             navController.navigate(Routes.TIMER)
                         },
                         onSavePb = { pb -> viewModel.savePersonalBest(pb) },
@@ -430,8 +433,8 @@ fun WorkoutDayListScreen(
 
     val sortedBlocks = plan.blocks.sortedBy { it.isCompleted }
     val sortedDays = filteredDays.sortedWith(compareBy({ it.workoutDay.isCompleted }, { dayWithWorkouts -> 
-        dayWithWorkouts.workouts.all { it.isCompleted } 
-    }))
+        dayWithWorkouts.workouts.isNotEmpty() && dayWithWorkouts.workouts.all { it.isCompleted }
+    }, { it.workoutDay.day }))
 
     if (showBlockDialog || blockToEdit != null) {
         var name by remember { mutableStateOf(blockToEdit?.name ?: "") }
@@ -1140,7 +1143,7 @@ fun PersonalBestsScreen(
                             PersonalBestItem(
                                 lift = lift,
                                 weightUnit = weightUnit,
-                                onEditPb = onEditPb,
+                                onEditPb = { pbToEdit = it },
                                 onDeletePb = onDeletePb
                             )
                         }
@@ -1157,7 +1160,7 @@ fun PersonalBestsScreen(
                             PersonalBestItem(
                                 lift = lift,
                                 weightUnit = weightUnit,
-                                onEditPb = onEditPb,
+                                onEditPb = { pbToEdit = it },
                                 onDeletePb = onDeletePb
                             )
                         }
@@ -1209,21 +1212,8 @@ fun WorkoutItemCard(
             workout.load.format(weightUnit)
         } 
         else {
-            val targetRpe = StrengthMath.parseRpe(workout.rpe)
-            val targetReps = workout.reps
-            if (targetRpe != null && targetReps != null) {
-                val pbNames = (personalBests.map { it.exerciseName } + DEFAULT_PR_TYPES).distinct()
-                val bestMatchName = FuzzyMatcher.findBestMatch(workout.exerciseName, pbNames) 
-
-                if (bestMatchName != null) {
-                    val matchingPbs = personalBests.filter { it.exerciseName == bestMatchName }
-                    if (matchingPbs.isNotEmpty()) {
-                        val maxOneRepMax = matchingPbs.maxOf { StrengthMath.calculateOneRepMax(it.load, it.repCount) }
-                        val estimatedLoad = StrengthMath.estimateLoad(maxOneRepMax, targetReps, targetRpe)
-                        "Est. ${estimatedLoad.format(weightUnit)}"
-                    } else null
-                } else null 
-            } else null 
+            val estimated = StrengthMath.getEstimatedLoadForWorkout(workout, personalBests, DEFAULT_PR_TYPES)
+            estimated?.let { "Est. ${it.format(weightUnit)}" }
         }
     }
 
@@ -1383,108 +1373,115 @@ fun SettingsScreen(
         )
     }
 
-    Scaffold { paddingValues ->
-        Column(modifier = Modifier.fillMaxSize().padding(paddingValues).padding(spacing.medium)) {
-            Text(text = "Settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(spacing.large))
-            
-            Text(text = "General", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(spacing.small))
-            
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(spacing.medium)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+    val scrollState = rememberScrollState()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(spacing.medium)
+            .verticalScroll(scrollState)
+    ) {
+        Text(text = "Settings", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(spacing.large))
+        
+        Text(text = "General", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(spacing.small))
+        
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(spacing.medium)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Weight Unit", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text(text = "Select preferred measurement system", style = MaterialTheme.typography.bodySmall)
+                    }
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Weight Unit", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                            Text(text = "Select preferred measurement system", style = MaterialTheme.typography.bodySmall)
-                        }
-                        ExposedDropdownMenuBox(
+                        OutlinedTextField(
+                            value = currentUnit.name,
+                            onValueChange = {}, 
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier.menuAnchor().width(120.dp)
+                        )
+                        ExposedDropdownMenu(
                             expanded = expanded,
-                            onExpandedChange = { expanded = !expanded }
+                            onDismissRequest = { expanded = false }
                         ) {
-                            OutlinedTextField(
-                                value = currentUnit.name,
-                                onValueChange = {}, 
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                modifier = Modifier.menuAnchor().width(120.dp)
-                            )
-                            ExposedDropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
-                            ) {
-                                WeightUnit.entries.forEach { unit ->
-                                    DropdownMenuItem(
-                                        text = { Text(unit.name) },
-                                        onClick = { 
-                                            onUpdateUnit(unit)
-                                            expanded = false 
-                                        }
-                                    )
-                                }
+                            WeightUnit.entries.forEach { unit ->
+                                DropdownMenuItem(
+                                    text = { Text(unit.name) },
+                                    onClick = { 
+                                        onUpdateUnit(unit)
+                                        expanded = false 
+                                    }
+                                )
                             }
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.height(spacing.large))
-                    
-                    Column {
-                        Text(text = "Setup Timer: $setupTimerSeconds seconds", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                        Text(text = "Delay before the rest timer starts", style = MaterialTheme.typography.bodySmall)
-                        Slider(
-                            value = setupTimerSeconds.toFloat(),
-                            onValueChange = { onUpdateSetupTimer(it.roundToInt()) },
-                            valueRange = 0f..30f,
-                            steps = 30
-                        )
-                    }
+                }
+                
+                Spacer(modifier = Modifier.height(spacing.large))
+                
+                Column {
+                    Text(text = "Setup Timer: $setupTimerSeconds seconds", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                    Text(text = "Delay before the rest timer starts", style = MaterialTheme.typography.bodySmall)
+                    Slider(
+                        value = setupTimerSeconds.toFloat(),
+                        onValueChange = { onUpdateSetupTimer(it.roundToInt()) },
+                        valueRange = 0f..30f,
+                        steps = 30
+                    )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(spacing.large))
-            Text(text = "Importers", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(spacing.small))
-            
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(spacing.medium)) {
-                    Text(text = "Standard Import", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = { excelLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall)
-                    ) {
-                        Icon(Icons.Default.FileUpload, contentDescription = null)
-                        Spacer(modifier = Modifier.width(spacing.small))
-                        Text("Excel Importer")
-                    }
+        }
+        
+        Spacer(modifier = Modifier.height(spacing.large))
+        Text(text = "Importers", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(spacing.small))
+        
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(spacing.medium)) {
+                Text(text = "Standard Import", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = { excelLauncher.launch("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall)
+                ) {
+                    Icon(Icons.Default.FileUpload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(spacing.small))
+                    Text("Excel Importer")
+                }
 
-                    Spacer(modifier = Modifier.height(spacing.medium))
-                    
-                    Text(text = "Nippard Programming", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = { nippardLauncher.launch("text/comma-separated-values") },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall)
-                    ) {
-                        Text("Jeff Nippard CSV Importer")
-                    }
+                Spacer(modifier = Modifier.height(spacing.medium))
+                
+                Text(text = "Nippard Programming", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = { nippardLauncher.launch("text/comma-separated-values") },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = spacing.extraSmall)
+                ) {
+                    Text("Jeff Nippard CSV Importer")
+                }
 
-                    Spacer(modifier = Modifier.height(spacing.medium))
+                Spacer(modifier = Modifier.height(spacing.medium))
 
-                    Text(text = "Moose Coaching", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = { mooseLauncher.launch("text/comma-separated-values") },
-                        modifier = Modifier.fillMaxWidth().wrapContentHeight(align = Alignment.CenterVertically),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                    ) {
-                        Text(
-                            "Power Building 3.0 Importer",
-                            maxLines = Int.MAX_VALUE,
-                            overflow = TextOverflow.Visible
-                        )
-                    }
+                Text(text = "Moose Coaching", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = { mooseLauncher.launch("text/comma-separated-values") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = spacing.extraSmall)
+                        .heightIn(min = 56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                ) {
+                    Text(
+                        "Power Building 3.0 Importer",
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
         }

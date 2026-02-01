@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -59,6 +61,8 @@ class TimerService : Service() {
     private val NOTIFICATION_ID = 1
     private val CHANNEL_ID = "timer_channel"
 
+    private var toneGenerator: ToneGenerator? = null
+
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
@@ -79,6 +83,24 @@ class TimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        try {
+            toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+        } catch (e: Exception) {
+            // ToneGenerator initialization might fail on some devices
+        }
+    }
+
+    private fun playCountdownBeep() {
+        toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 100)
+    }
+
+    private fun playDoneBeeps() {
+        serviceScope.launch {
+            repeat(3) {
+                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 250)
+                delay(500)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -204,28 +226,33 @@ class TimerService : Service() {
         timerJob = serviceScope.launch {
             // Setup phase
             while (_setupTimeLeft.value > 0) {
+                if (_setupTimeLeft.value in 1000L..3000L) playCountdownBeep()
                 delay(1000)
                 _setupTimeLeft.value -= 1000
                 updateNotification()
             }
-            isSetupActive = false
             
-            // Re-sync phase info if transitioning from setup
-            if (phaseQueue.isNotEmpty() && _currentPhaseIndex.value == 0 && _phaseName.value == "Setup") {
+            // Transition from Setup to first Timer phase
+            if (phaseQueue.isNotEmpty() && _currentPhaseIndex.value == 0 && isSetupActive) {
+                playDoneBeeps()
                 val first = phaseQueue[0]
                 _timeLeft.value = first.durationMillis
                 _phaseName.value = first.name
                 updateNextPhaseName()
                 updateUpcomingPhases()
             }
+            isSetupActive = false
 
             // Main phases
             while (true) {
                 while (_timeLeft.value > 0) {
+                    if (_timeLeft.value in 1000L..3000L) playCountdownBeep()
                     delay(1000)
                     _timeLeft.value -= 1000
                     updateNotification()
                 }
+
+                playDoneBeeps()
 
                 if (_currentPhaseIndex.value < phaseQueue.size - 1) {
                     _currentPhaseIndex.value++
@@ -330,5 +357,6 @@ class TimerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         timerJob?.cancel()
+        toneGenerator?.release()
     }
 }

@@ -15,10 +15,10 @@ class StrengthMathTest {
     }
 
     @Test
-    fun `calculateOneRepMax - 305 for 3 reps uses 24 constant`() {
-        // 305 * (1 + (3-1)/24) = 305 * (1 + 2/24) = 330.416...
+    fun `calculateOneRepMax - 305 for 3 reps uses 30 constant`() {
+        // 305 * (1 + 3/30.0) = 305 * 1.1 = 335.5
         val result = StrengthMath.calculateOneRepMax(305.0, 3)
-        assertEquals(330.4, result, TOLERANCE)
+        assertEquals(335.5, result, TOLERANCE)
     }
 
     @Test
@@ -29,19 +29,20 @@ class StrengthMathTest {
 
     @Test
     fun `estimateLoad - 3 reps at RPE 10 with 335 1RM`() {
-        // 335 / (1 + (3-1)/24) = 335 / 1.0833 = 309.23
-        // Rounded to nearest 0.5 = 309.0
+        // 335 / (1 + 3/30.0) = 335 / 1.1 = 304.545...
+        // Rounded to nearest 0.5 = 304.5
         val result = StrengthMath.estimateLoad(335.0, 3, 10.0)
-        assertEquals(309.0, result, TOLERANCE)
+        assertEquals(304.5, result, TOLERANCE)
     }
 
     @Test
     fun `estimateLoad - submaximal RPE 8 uses effective reps`() {
         val oneRepMax = 100.0
-        // 5 reps @ RPE 8 = 7 effective reps
-        // 100 / (1 + (7-1)/24) = 100 / 1.25 = 80.0
+        // 5 reps @ RPE 8 = 7 effective reps (5 actual + 2 RIR)
+        // 100 / (1 + 7/30.0) = 100 / 1.2333 = 81.08
+        // Rounded to nearest 0.5 = 81.0
         val result = StrengthMath.estimateLoad(oneRepMax, 5, 8.0)
-        assertEquals(80.0, result, TOLERANCE)
+        assertEquals(81.0, result, TOLERANCE)
     }
 
     @Test

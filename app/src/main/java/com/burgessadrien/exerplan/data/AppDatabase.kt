@@ -60,7 +60,7 @@ class Converters {
 
 @Database(
     entities = [WorkoutPlan::class, WorkoutDay::class, LiftingWorkout::class, PersonalBestLift::class, UserSettings::class, WorkoutBlock::class],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

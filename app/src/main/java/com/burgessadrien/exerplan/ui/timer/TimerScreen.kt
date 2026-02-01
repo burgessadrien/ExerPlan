@@ -256,7 +256,7 @@ fun TimerScreen(
                     )
                 ) {
                     val icon = if (isTimerActive) Icons.Default.Add else Icons.Default.PlayArrow
-                    val text = if (isTimerActive) "Queue Rest" else if (localQueue.isNotEmpty() && totalInputSecs == 0) "Start Queue" else "Start Timer"
+                    val text = if (isTimerActive) "Queue Timer" else if (localQueue.isNotEmpty() && totalInputSecs == 0) "Start Queue" else "Start Timer"
                     Icon(icon, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(text, fontWeight = FontWeight.Bold)

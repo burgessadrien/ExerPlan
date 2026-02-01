@@ -32,5 +32,6 @@ data class WorkoutDay(
     var blockId: Long? = null,
     val name: String,
     val dayType: DayType = DayType.WORKING,
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    val day: Int = 1
 )
